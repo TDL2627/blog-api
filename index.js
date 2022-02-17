@@ -1,12 +1,30 @@
 const express = require("express");
 const cors = require("cors");
 const mysql = require('mysql');
-// Needed fixes
-// https://stackoverflow.com/questions/50093144/mysql-8-0-client-does-not-support-authentication-protocol-requested-by-server
-//
-//
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 
+
+// authenticate
+require("dotenv").config();
+
+function authenticateToken(req,res, next){
+    const authHeader = re.headers["authorization"];
+    const token = authHeader && authHeader.split("")[1];
+
+    if (!token) res.sendStatus(401);
+
+    jwt.verify(token,process.env.SECRET_KEY,(err,user)=>{
+        if(err)res.sendStatus(403);
+        req.user =user;
+        next();
+    });
+}
+
+
+
+// db conect
 const con = mysql.createConnection({
     host: "localhost",
     user: "root",
@@ -14,6 +32,18 @@ const con = mysql.createConnection({
     database: "personal_blog"
   });
   
+// date
+function getToday() {
+  let today = new Date();
+  const dd = String(today.getDate()).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0"); //January is 0!
+  const yyyy = today.getFullYear();
+
+  today = yyyy + "/" + mm + "/" + dd;
+
+  return today;
+}
+
 
 
 const app = express();
@@ -32,6 +62,9 @@ app.get("/", (req, res) => {
   });
 });
 
+// users
+
+
 // get all users
 app.get('/users', (req, res)=>{
     var sql = `SELECT * FROM users`;
@@ -42,16 +75,25 @@ app.get('/users', (req, res)=>{
     });
   });
 
-  // sign in
-  app.patch('/users', (req, res)=>{
-    const {email,password}=req.body;
-    var sql = `SELECT * FROM users WHERE user_email='${email}' AND user_password='${password}'`;
-    con.query(sql, function (err, result) {
-      if (err) throw err;
-      console.log("signed in");
-      res.send(result)
-    });
+// LOGIN (email, pass)
+app.patch('/', async (req, res)=>{
+  const {email, password} = req.body;
+try {
+  var sql = `SELECT * FROM users WHERE user_email = '${email}'`;
+  con.query(sql, async function (err, result) {
+    if (await bcrypt.compare(password, result[0].user_password))
+    {
+    const access_token = jwt.sign(JSON.stringify(result[0].user_password), process.env.ACCESS_TOKEN_SECRET)
+    res.send({jwt: access_token})
+    console.log("1 record found");
+    console.log(result)
+  }
+
   });
+} catch (error) {
+  res.status(500).send()
+}
+});
 
 // get one
 app.get('/users/:id', (req, res)=>{
@@ -111,18 +153,25 @@ app.delete('/users/:id',(req, res) =>{
 
 
 // add user
-app.post('/users',(req, res) =>{
+app.post('/users',async(req, res) =>{
     const {name, email, contact, password} =req.body;
     if(!name || !email || !contact ||  !password)
     res.status(400).send({msg:"not all data inserted"});
-         var sql = `INSERT INTO users (user_name, user_email, user_contact, user_password) VALUES ('${name}', '${email}',  '${contact}','${password}')`;
-         con.query(sql, function (err, result) {
-           if (err) throw err;
-           console.log("1 user inserted");
-         });
-       });
+    try {
+      const salt = await bcrypt.genSalt()
+      const hashedPassword = await bcrypt.hash(password, salt)
+      var sql = ` INSERT INTO users (user_name, user_email, user_contact, user_password) VALUES ('${name}', '${email}', '${contact}','${hashedPassword}')`;
+      con.query(sql, function (err, result) {
+        if (err) throw err;
+        console.log("1 record inserted");
+      });
+    } catch (error) {
+      res.status(500).send()
+    }
+    });
  
 
+      //  BLOGS
 
        // get all blogs
 app.get('/blogs', (req, res)=>{
@@ -135,11 +184,11 @@ app.get('/blogs', (req, res)=>{
 });
  
 // add blog
-app.post('/blogs',(req, res) =>{
-  const {title, body, date, author} =req.body;
-  if(!title || !body || !date || !author )
+app.post('/blogs',authenticateToken, (req, res) =>{
+  const {title, body} =req.body;
+  if(!title || !body  )
   res.status(400).send({msg:"not all data inserted"});
-       var sql = `INSERT INTO posts (post_title, post_body, post_date , post_author) VALUES ('${title}', '${body}', '${date}' , '${author}')`;
+       var sql = `INSERT INTO posts (post_title, post_body, post_date , post_author) VALUES ('${title}', '${body}', '${getToday()}', '${req.user.user_id}')`;
        con.query(sql, function (err, result) {
          if (err) throw err;
          console.log("1 record inserted");
