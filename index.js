@@ -1,6 +1,8 @@
+// mongo
+
 const express = require("express");
 const cors = require("cors");
-const mysql = require('mysql');
+const mongoose = require('mongoose')
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
@@ -27,12 +29,12 @@ function authenticateToken(req,res, next){
 
 
 // db conect
-const con = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password:"uchiha2627",
-    database: "personal_blog"
-  });
+mongoose.connect('mongodb+srv://TDL2627:uchiha2627@subscribers.akyll.mongodb.net/myFirstDatabase?retryWrites=true&w=majority')
+const db = mongoose.connection;
+db.on('error',(error)=>console.log(error));
+db.once('open',()=> console.log("Connected succesfully"))
+
+
   
 // date
 function getToday() {
