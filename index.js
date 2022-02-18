@@ -10,13 +10,17 @@ const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 function authenticateToken(req,res, next){
-    const authHeader = re.headers["authorization"];
-    const token = authHeader && authHeader.split("")[1];
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
 
     if (!token) res.sendStatus(401);
 
-    jwt.verify(token,process.env.SECRET_KEY,(err,user)=>{
-        if(err)res.sendStatus(403);
+    console.log(process.env.ACCESS_TOKEN_SECRET)
+    jwt.verify(token,process.env.ACCESS_TOKEN_SECRET,(err,user)=>{
+        if(err){
+          console.log(err)
+          res.sendStatus(403)
+        };
         req.user =user;
         next();
     });
@@ -76,16 +80,16 @@ app.get('/users', (req, res)=>{
   });
 
 // LOGIN (email, pass)
-app.patch('/', async (req, res)=>{
+app.patch('/',async (req, res)=>{
   const {email, password} = req.body;
 try {
   var sql = `SELECT * FROM users WHERE user_email = '${email}'`;
   con.query(sql, async function (err, result) {
     if (await bcrypt.compare(password, result[0].user_password))
     {
-    const access_token = jwt.sign(JSON.stringify(result[0].user_password), process.env.ACCESS_TOKEN_SECRET)
+    const access_token = jwt.sign(JSON.stringify(result[0]), process.env.ACCESS_TOKEN_SECRET)
     res.send({jwt: access_token})
-    console.log("1 record found");
+    console.log("User logged in");
     console.log(result)
   }
 
@@ -163,7 +167,7 @@ app.post('/users',async(req, res) =>{
       var sql = ` INSERT INTO users (user_name, user_email, user_contact, user_password) VALUES ('${name}', '${email}', '${contact}','${hashedPassword}')`;
       con.query(sql, function (err, result) {
         if (err) throw err;
-        console.log("1 record inserted");
+        console.log("User Added");
       });
     } catch (error) {
       res.status(500).send()
@@ -174,7 +178,7 @@ app.post('/users',async(req, res) =>{
       //  BLOGS
 
        // get all blogs
-app.get('/blogs', (req, res)=>{
+app.get('/blogs', authenticateToken, (req, res)=>{
   var sql = `SELECT * FROM posts`;
   con.query(sql, function (err, result) {
     if (err) throw err;
@@ -197,7 +201,7 @@ app.post('/blogs',authenticateToken, (req, res) =>{
      });
 
 // delete a blog
-app.delete('/blogs/:id',(req, res) =>{
+app.delete('/blogs/:id',authenticateToken,(req, res) =>{
   var sql = `DELETE FROM posts WHERE post_id=${req.params.id}`;
        con.query(sql, function (err, result) {
          if (err) throw err;
@@ -207,7 +211,7 @@ app.delete('/blogs/:id',(req, res) =>{
      });
 
 //  update blog
-app.put('/blogs/:id', (req, res)=>{
+app.put('/blogs/:id',authenticateToken, (req, res)=>{
   const {title,body} = req.body;
   let id = req.params.id;
     var sql = `UPDATE posts SET`
